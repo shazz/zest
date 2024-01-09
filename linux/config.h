@@ -50,6 +50,10 @@ typedef struct {
 
   // keyboard
   int right_alt_is_altgr;           // right alt = 1:Milan AltGr code, 0:Alternate
+
+  // joystick
+  int joystick_emulation;           // key to switch joystick emulation
+  int joystick_usb_support;         // 1:USB joystick enabled, 0:disabled
 } ZestConfig;
 
 extern ZestConfig config;

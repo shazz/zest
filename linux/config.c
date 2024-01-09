@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <ini.h>
+#include <linux/input-event-codes.h>
 
 #include "config.h"
 
@@ -54,6 +55,21 @@ static int memorysize(const char *x) {
 
   printf("invalid size setting `%s`\n",x);
   return CFG_1M;   // 1 MB
+}
+
+// interpret string str as a key setting
+static int keyname(const char *x) {
+  static const char *values[] = {"PRINT_SCREEN", "NUM_LOCK"};
+  static const int key_values[] = {KEY_SYSRQ, KEY_NUMLOCK};
+  int i;
+  for (i=0;i<sizeof(values)/sizeof(values[0]);++i) {
+    if (strcasecmp(x,values[i])==0) {
+      return key_values[i];
+    }
+  }
+
+  printf("invalid key setting `%s`\n",x);
+  return key_values[0];   // print screen
 }
 
 static int handler(void* user, const char* section, const char* name, const char* value) {
@@ -94,6 +110,10 @@ static int handler(void* user, const char* section, const char* name, const char
     if (value) pconfig->hdd_image = strdup(value);
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
+  } else if (MATCH("joystick","joystick_emulation")) {
+      pconfig->joystick_emulation = keyname(value);
+  } else if (MATCH("joystick","joystick_usb_support")) {
+      if (value) pconfig->joystick_usb_support = truefalse(value);    
   }
   else {
     return 0;  /* unknown section/name, error */
@@ -114,6 +134,8 @@ void config_load(const char *filename) {
   config.floppy_b_write_protect = 0;
   config.hdd_image = NULL;
   config.right_alt_is_altgr = 0;
+  config.joystick_emulation = KEY_NUMLOCK;
+  config.joystick_usb_support = 0;
 
   if (ini_parse(filename,handler,&config) < 0) {
     printf("Can't load `%s`\n",filename);

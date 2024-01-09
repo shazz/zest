@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdio.h>
 
 #include <linux/input-event-codes.h>
 
@@ -28,10 +29,13 @@
 #include "infomsg.h"
 
 #define JOY_EMU_LED_FILE "/sys/class/leds/led1/brightness"
+#define MOUSE_PLUGGED_LED_FILE "/sys/class/leds/led0/brightness"
 
 extern volatile uint32_t *parmreg;
 
 extern volatile int thr_end;
+int right_button_pushed = 0;
+int left_button_pushed = 0;
 
 
 void led_status(int fd,int st) {
@@ -47,13 +51,15 @@ void * thread_ikbd(void * arg) {
   int timeout = 100;
 
   int joyemufd = open(JOY_EMU_LED_FILE,O_WRONLY|O_SYNC);
+  int mousepluggedfd = open(MOUSE_PLUGGED_LED_FILE,O_WRONLY|O_SYNC);
   int joy_emu = 0;
+  int mouse_plugged = 1;
 
   input_init();
 
   while (thr_end == 0) {
-    int evtype, evcode, evvalue;
-    int retval = input_event(timeout,&evtype,&evcode,&evvalue);
+    int evtype, evcode, evvalue, device;
+    int retval = input_event(timeout,&evtype,&evcode,&evvalue,&device);
     if (retval < 0) {
       // an error occurred
       break;
@@ -174,14 +180,22 @@ void * thread_ikbd(void * arg) {
             case BTN_LEFT: key = 122; break;
             case BTN_RIGHT: key = 127; break;
             case BTN_GAMEPAD: key = 127; break;
+            case KEY_SYSRQ:
             case KEY_NUMLOCK:
-              if (evvalue == 1) {
+              if (config.joystick_emulation == evcode && evvalue == 1) {
                 joy_emu = !joy_emu;
                 led_status(joyemufd,joy_emu);
               }
-              break;
-            case KEY_PAGEUP:
+              break;    
+            case KEY_BREAK:
             case KEY_SCROLLLOCK:
+              if(evvalue == 1) {
+                printf("Mouse is plugged? %d\n", mouse_plugged);
+                mouse_plugged = !mouse_plugged;
+                led_status(mousepluggedfd,mouse_plugged);
+              }
+              break;               
+            case KEY_PAGEUP:
               menu();
               break;
             case KEY_MUTE:
@@ -201,18 +215,74 @@ void * thread_ikbd(void * arg) {
           }
           break;
         case EV_ABS:
-          // direction event
+          printf("EV_ABS event with code: %d and value %d from device %d\n", evcode, evvalue, device);
+          key = -1;
+          unsigned int val = 3;
+          
+          if((device == 3) && (mouse_plugged == 0)) {
+            // direction event
+            if(evcode==ABS_X) {
+              key = 125-5;
+              if (evvalue>0) val = 1;
+              if (evvalue<0) val = 2;
+              parmreg[4+key/32] = (parmreg[4+key/32] & ~(3<<key%32)) | val<<(key%32);
+            }
+            if(evcode==ABS_Y) {
+              key = 123-5;
+              if (evvalue==0) val = 2;
+              if (evvalue!=0) val = 1;            
+              parmreg[4+key/32] = (parmreg[4+key/32] & ~(3<<key%32)) | val<<(key%32);
+            }  
+          }
+
+          if(device == 4) {
+            // direction event
+            if(evcode==ABS_X) {
+              key = 125;
+              if (evvalue>0) val = 1;
+              if (evvalue<0) val = 2;
+              parmreg[4+key/32] = (parmreg[4+key/32] & ~(3<<key%32)) | val<<(key%32);
+            }
+            if(evcode==ABS_Y) {
+              key = 123;
+              if (evvalue==0) val = 2;
+              if (evvalue!=0) val = 1;            
+              parmreg[4+key/32] = (parmreg[4+key/32] & ~(3<<key%32)) | val<<(key%32);
+            }  
+          }          
+          
+
+        
+
+          // analog button event
           if (evcode==ABS_HAT0X||evcode==ABS_HAT0Y) {
-            unsigned int val = 3;
-            key = -1;
             if (evvalue==-1) val = 2;
             if (evvalue==1) val = 1;
             if (evcode==ABS_HAT0X) key = 125;  // left/right
             if (evcode==ABS_HAT0Y) key = 123;  // up/down
             if (key!=-1) {
               parmreg[4+key/32] = (parmreg[4+key/32] & ~(3<<key%32)) | val<<(key%32);
-            }
+            }            
           }
+          break;
+        case EV_MSC:
+          printf("EV_MSC event with code: %d and value %d from device %d\n", evcode, evvalue, device);
+          if (evcode==4) { 
+            if((device == 3) && (mouse_plugged == 0)) {
+              key = 122;
+              left_button_pushed = 1 - left_button_pushed;
+              parmreg[4+key/32] = (parmreg[4+key/32] & ~(1<<key%32)) | (!left_button_pushed)<<(key%32);
+            }
+            if(device == 4) {
+              key = 127;
+              right_button_pushed = 1 - right_button_pushed;
+              parmreg[4+key/32] = (parmreg[4+key/32] & ~(1<<key%32)) | (!right_button_pushed)<<(key%32);
+            }
+            
+          }      
+          break;
+        default:
+          // printf("Other event => type: %d code:%d val:%d\n",evtype,evcode,evvalue);
           break;
       }
     }
@@ -221,62 +291,64 @@ void * thread_ikbd(void * arg) {
       // a timeout occurred
       timeout = 100;
 
-      // Decompose mouse events (dx,dy) into a series of 2-bit Gray code pairs.
-      // Those Gray codes must ideally be sent at about the frequency at which the
-      // HD6301 keyboard processor reads its mouse input pins.
-      // This frequency is typically much higher than the frequency of USB mouse
-      // events.
-      if (dx>=2) {
-        if (ox==1 && dx>=4) {
-          mx = (mx+2)&3;
-          dx -= 4;
+      if(mouse_plugged == 1) {
+        // Decompose mouse events (dx,dy) into a series of 2-bit Gray code pairs.
+        // Those Gray codes must ideally be sent at about the frequency at which the
+        // HD6301 keyboard processor reads its mouse input pins.
+        // This frequency is typically much higher than the frequency of USB mouse
+        // events.
+        if (dx>=2) {
+          if (ox==1 && dx>=4) {
+            mx = (mx+2)&3;
+            dx -= 4;
+          }
+          else {
+            mx = (mx+1)&3;
+            dx -= 2;
+            ox = 1;
+          }
+          timeout = 1;
         }
-        else {
-          mx = (mx+1)&3;
-          dx -= 2;
-          ox = 1;
+        if (dx<=-2) {
+          if (ox==-1 && dx<=-4) {
+            mx = (mx+2)&3;
+            dx += 4;
+          }
+          else {
+            mx = (mx+3)&3;
+            dx += 2;
+            ox = -1;
+          }
+          timeout = 1;
         }
-        timeout = 1;
+        if (dy>=2) {
+          if (oy==1 && dy>=4) {
+            my = (my+2)&3;
+            dy -= 4;
+          }
+          else {
+            my = (my+1)&3;
+            dy -= 2;
+            oy = 1;
+          }
+          timeout = 1;
+        }
+        if (dy<=-2) {
+          if (oy==-1 && dy<=-4) {
+            my = (my+2)&3;
+            dy += 4;
+          }
+          else {
+            my = (my+3)&3;
+            dy += 2;
+            oy = -1;
+          }
+          timeout = 1;
+        }
+        int x = (mx>>1)^mx;
+        int y = (my>>1)^my;
+        parmreg[7] = (parmreg[7] & 0xfc3fffff) | x<<22 | y<<24;
       }
-      if (dx<=-2) {
-        if (ox==-1 && dx<=-4) {
-          mx = (mx+2)&3;
-          dx += 4;
-        }
-        else {
-          mx = (mx+3)&3;
-          dx += 2;
-          ox = -1;
-        }
-        timeout = 1;
-      }
-      if (dy>=2) {
-        if (oy==1 && dy>=4) {
-          my = (my+2)&3;
-          dy -= 4;
-        }
-        else {
-          my = (my+1)&3;
-          dy -= 2;
-          oy = 1;
-        }
-        timeout = 1;
-      }
-      if (dy<=-2) {
-        if (oy==-1 && dy<=-4) {
-          my = (my+2)&3;
-          dy += 4;
-        }
-        else {
-          my = (my+3)&3;
-          dy += 2;
-          oy = -1;
-        }
-        timeout = 1;
-      }
-      int x = (mx>>1)^mx;
-      int y = (my>>1)^my;
-      parmreg[7] = (parmreg[7] & 0xfc3fffff) | x<<22 | y<<24;
     }
   }
 

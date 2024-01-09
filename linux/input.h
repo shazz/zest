@@ -20,7 +20,7 @@
 
 void input_init(void);
 
-int input_event(int timeout, int *type, int *code, int *value);
+int input_event(int timeout, int *type, int *code, int *value, int* device);
 
 #endif
 

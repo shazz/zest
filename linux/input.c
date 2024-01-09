@@ -85,7 +85,7 @@ void input_init(void) {
   inotify_add_watch(inotify_fd,"/dev/input",IN_CREATE|IN_DELETE);
 }
 
-int input_event(int timeout, int *type, int *code, int *value) {
+int input_event(int timeout, int *type, int *code, int *value, int *device) {
   char inbuf[sizeof(struct inotify_event)+NAME_MAX+1];
   if (ie_i < ie_count) {
     *type = ie[ie_i].type;
@@ -100,7 +100,9 @@ int input_event(int timeout, int *type, int *code, int *value) {
       ie_count = sz/sizeof(struct input_event);
       ie_i = 0;
       ++fd_i;
-      return input_event(timeout,type,code,value);
+      // printf("Sending event from device %d: type: %d, code: %d, value: %d\n", fd_i, *type, *code, *value);
+      *device = fd_i;
+      return input_event(timeout,type,code,value,device);
     }
   }
   // All poll events have been processed. We may now scan for new and removed
@@ -129,7 +131,8 @@ int input_event(int timeout, int *type, int *code, int *value) {
     return -1;
   } else if (retval>0) {
     fd_i = 0;
-    return input_event(timeout,type,code,value);
+    *device = 0;
+    return input_event(timeout,type,code,value,device);
   }
   // timeout occurred
   return 0;

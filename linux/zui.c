@@ -308,8 +308,8 @@ int zui_run(int xpos, int ypos, ZuiWidget *obj) {
   }
 
   while (quit == 0 && thr_end == 0) {
-    int evtype, evcode, evvalue;
-    int retval = input_event(100,&evtype,&evcode,&evvalue);
+    int evtype, evcode, evvalue, device;
+    int retval = input_event(100,&evtype,&evcode,&evvalue,&device);
     if (retval < 0) {
       // an error occurred
       break;
