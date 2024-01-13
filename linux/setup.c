@@ -41,6 +41,9 @@ void * thread_floppy(void * arg);
 /* from ikbd.c */
 void * thread_ikbd(void * arg);
 
+/* from joystick.c */
+void * thread_joystick(void * arg);
+
 /* from infomsg.c */
 void * thread_infomsg(void * arg);
 
@@ -239,6 +242,8 @@ int main(int argc, char **argv) {
   memset(mem_array+0xfa0000,0xff,0x20000);
   if (load_rom(config.rom_file)!=0) return 1;
 
+  pthread_t joystick_thr;
+  pthread_create(&joystick_thr,NULL,thread_joystick,NULL);
   pthread_t kbd_thr;
   pthread_create(&kbd_thr,NULL,thread_ikbd,NULL);
   pthread_t floppy_thr;
@@ -256,6 +261,7 @@ int main(int argc, char **argv) {
     usleep(10000);
   }
   parmreg[0] = 0;
+  pthread_join(joystick_thr,NULL);
   pthread_join(kbd_thr,NULL);
   pthread_join(floppy_thr,NULL);
   pthread_join(infomsg_thr,NULL);

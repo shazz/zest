@@ -19,8 +19,8 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-
-enum cfg_mem_size {
+enum cfg_mem_size
+{
   CFG_256K = 0,
   CFG_512K,
   CFG_1M,
@@ -29,37 +29,35 @@ enum cfg_mem_size {
   CFG_4M
 };
 
-
-typedef struct {
+typedef struct
+{
   // main
-  int mono;                         // 1 if mono, 0 if colour mode
-  int extended_video_modes;					// 1:hardware fullscreen enabled, 0:disabled
-  enum cfg_mem_size mem_size;       // memory size
-  int wakestate;                    // wakestate (1-4)
-  const char *rom_file;             // ROM file, full path
+  int mono;                   // 1 if mono, 0 if colour mode
+  int extended_video_modes;   // 1:hardware fullscreen enabled, 0:disabled
+  enum cfg_mem_size mem_size; // memory size
+  int wakestate;              // wakestate (1-4)
+  const char *rom_file;       // ROM file, full path
 
   // floppy
-  const char *flopimg_dir;          // Default directory to open new image files
-  const char *floppy_a;             // A: floppy image file, full path
-  int floppy_a_write_protect;       // A: write protect (1:on, 0:off)
-  const char *floppy_b;             // B: floppy image file, full path
-  int floppy_b_write_protect;       // B: write protect (1:on, 0:off)
+  const char *flopimg_dir;    // Default directory to open new image files
+  const char *floppy_a;       // A: floppy image file, full path
+  int floppy_a_write_protect; // A: write protect (1:on, 0:off)
+  const char *floppy_b;       // B: floppy image file, full path
+  int floppy_b_write_protect; // B: write protect (1:on, 0:off)
 
   // hard disk
-  const char *hdd_image;            // Hard disk image
+  const char *hdd_image; // Hard disk image
 
   // keyboard
-  int right_alt_is_altgr;           // right alt = 1:Milan AltGr code, 0:Alternate
+  int right_alt_is_altgr; // right alt = 1:Milan AltGr code, 0:Alternate
 
   // joystick
-  int joystick_emulation;           // key to switch joystick emulation
-  int joystick_usb_support;         // 1:USB joystick enabled, 0:disabled
+  int joystick_emulation; // key to switch joystick emulation
 } ZestConfig;
 
 extern ZestConfig config;
 
 // Load config from file
 void config_load(const char *filename);
-
 
 #endif

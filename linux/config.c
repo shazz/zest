@@ -112,8 +112,6 @@ static int handler(void* user, const char* section, const char* name, const char
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
   } else if (MATCH("joystick","joystick_emulation")) {
       pconfig->joystick_emulation = keyname(value);
-  } else if (MATCH("joystick","joystick_usb_support")) {
-      if (value) pconfig->joystick_usb_support = truefalse(value);    
   }
   else {
     return 0;  /* unknown section/name, error */
@@ -135,7 +133,6 @@ void config_load(const char *filename) {
   config.hdd_image = NULL;
   config.right_alt_is_altgr = 0;
   config.joystick_emulation = KEY_NUMLOCK;
-  config.joystick_usb_support = 0;
 
   if (ini_parse(filename,handler,&config) < 0) {
     printf("Can't load `%s`\n",filename);
