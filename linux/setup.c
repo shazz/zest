@@ -58,6 +58,7 @@ volatile int thr_end = 0;
 static int sound_mute = 0;
 static int sound_vol = 16;
 
+
 static void setup_cfg(int reset) {
   static const int mem_cfg[] = {0,1,3,7,9,15};
   static const int ws_cfg[] = {2,3,1,0};
@@ -242,8 +243,11 @@ int main(int argc, char **argv) {
   memset(mem_array+0xfa0000,0xff,0x20000);
   if (load_rom(config.rom_file)!=0) return 1;
 
-  pthread_t joystick_thr;
-  pthread_create(&joystick_thr,NULL,thread_joystick,NULL);
+
+  pthread_t joystick_thr0;
+  pthread_create(&joystick_thr0,NULL,thread_joystick, NULL);
+  pthread_t joystick_thr1;
+  pthread_create(&joystick_thr1,NULL,thread_joystick, NULL);
   pthread_t kbd_thr;
   pthread_create(&kbd_thr,NULL,thread_ikbd,NULL);
   pthread_t floppy_thr;
@@ -261,7 +265,8 @@ int main(int argc, char **argv) {
     usleep(10000);
   }
   parmreg[0] = 0;
-  pthread_join(joystick_thr,NULL);
+  pthread_join(joystick_thr0,NULL);
+  pthread_join(joystick_thr1,NULL);
   pthread_join(kbd_thr,NULL);
   pthread_join(floppy_thr,NULL);
   pthread_join(infomsg_thr,NULL);

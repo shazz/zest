@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <linux/joystick.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "config.h"
 
@@ -28,6 +29,7 @@
 
 extern volatile uint32_t *parmreg;
 extern volatile int thr_end;
+int joystick_nb_connected = 0;
 
 struct axis_state
 {
@@ -96,82 +98,93 @@ size_t get_axis_state(struct js_event *event, struct axis_state axes[3])
     return axis;
 }
 
+
 void *thread_joystick(void *arg)
 {
-
-    const char *device;
     int js;
     struct js_event event;
-    struct axis_state axes[3] = {0};
     size_t axis;
+
+    struct axis_state axes[3] = {0};
+
+    int joystick_plugged = -1;
+
+    char device[15];
+
+    int joystick_nb = joystick_nb_connected;
+    joystick_nb_connected += 1;
 
     int joyfd = open(JOY_LED_FILE, O_WRONLY | O_SYNC);
     joy_led_status(joyfd, 1);
 
-    printf("Opening icode\n");
-    device = "/dev/input/js0";
+    sprintf(device, "/dev/input/js%d", joystick_nb);
+    printf("Opening icode for joystick %d on %s\n", joystick_nb, device);
+
     js = open(device, O_RDONLY);
-    int joystick_nb = 5 * 0;
-
-    if (js == -1)
+    if (js != -1)
     {
-        perror("Could not open joystick");
+        joystick_plugged = 1;
+        printf("Joystick %d detected\n", joystick_nb);
+    } else {
+        printf("Cannot open %s\n", device);
     }
-
-    int button_count = get_button_count(js);
-    printf("buttons: %d\n", button_count);
 
     /* This loop will exit if the controller is unplugged. */
     while (thr_end == 0)
     {
-        read_event(js, &event);
-        switch (event.type)
-        {
-        case JS_EVENT_BUTTON:
-            printf("Button %u %s\n", event.number, event.value ? "pressed" : "released");
-            parmreg[4 + (122 + joystick_nb) / 32] = (parmreg[4 + (122 + joystick_nb) / 32] & ~(1 << (122 + joystick_nb) % 32)) | (!event.value) << ((122 + joystick_nb) % 32);
-            break;
-        case JS_EVENT_AXIS:
-            axis = get_axis_state(&event, axes);
-            if (axis < 3)
+        if(joystick_plugged == 1) {
+            read_event(js, &event);
+
+            switch (event.type)
             {
-                printf("Axis %zu at (%6d, %6d)\n", axis, axes[axis].x, axes[axis].y);
-                if (axes[axis].x < 0)
-                {
-                    parmreg[4 + (120 + joystick_nb) / 32] = (parmreg[4 + (120 + joystick_nb) / 32] & ~(3 << (120 + joystick_nb) % 32)) | 2 << ((120 + joystick_nb) % 32);
-                }
-                if (axes[axis].x > 0)
-                {
-                    parmreg[4 + (120 + joystick_nb) / 32] = (parmreg[4 + (120 + joystick_nb) / 32] & ~(3 << (120 + joystick_nb) % 32)) | 1 << ((120 + joystick_nb) % 32);
-                }
-                if (axes[axis].y < 0)
-                {
-                    parmreg[4 + (118 + joystick_nb) / 32] = (parmreg[4 + (118 + joystick_nb) / 32] & ~(3 << (118 + joystick_nb) % 32)) | 2 << ((118 + joystick_nb) % 32);
-                }
-                if (axes[axis].y > 0)
-                {
-                    parmreg[4 + (118 + joystick_nb) / 32] = (parmreg[4 + (118 + joystick_nb) / 32] & ~(3 << (118 + joystick_nb) % 32)) | 1 << ((118 + joystick_nb) % 32);
-                }
-                if (axes[axis].x == 0)
-                {
-                    parmreg[4 + (120 + joystick_nb) / 32] = (parmreg[4 + (120 + joystick_nb) / 32] & ~(3 << (120 + joystick_nb) % 32)) | 3 << ((120 + joystick_nb) % 32);
-                }
-                if (axes[axis].y == 0)
-                {
-                    parmreg[4 + (118 + joystick_nb) / 32] = (parmreg[4 + (118 + joystick_nb) / 32] & ~(3 << (118 + joystick_nb) % 32)) | 3 << ((118 + joystick_nb) % 32);
-                }
+                case JS_EVENT_BUTTON:
+                    printf("Button of joystick %d: %u %s\n", joystick_nb, event.number, event.value ? "pressed" : "released");
+                    parmreg[4 + (122 + (joystick_nb*5)) / 32] = (parmreg[4 + (122 + (joystick_nb*5)) / 32] & ~(1 << (122 + (joystick_nb*5)) % 32)) | (!event.value) << ((122 + (joystick_nb*5)) % 32);
+                    break;
+
+                case JS_EVENT_AXIS:
+                    axis = get_axis_state(&event, axes);
+                    if (axis < 3)
+                    {
+                        printf("Axis of joystick %d: %zu at (%6d, %6d)\n", joystick_nb, axis, axes[axis].x, axes[axis].y);
+                        if (axes[axis].x < 0)
+                        {
+                            parmreg[4 + (120 + (joystick_nb*5)) / 32] = (parmreg[4 + (120 + (joystick_nb*5)) / 32] & ~(3 << (120 + (joystick_nb*5)) % 32)) | 2 << ((120 + (joystick_nb*5)) % 32);
+                        }
+                        if (axes[axis].x > 0)
+                        {
+                            parmreg[4 + (120 + (joystick_nb*5)) / 32] = (parmreg[4 + (120 + (joystick_nb*5)) / 32] & ~(3 << (120 + (joystick_nb*5)) % 32)) | 1 << ((120 + (joystick_nb*5)) % 32);
+                        }
+                        if (axes[axis].y < 0)
+                        {
+                            parmreg[4 + (118 + (joystick_nb*5)) / 32] = (parmreg[4 + (118 + (joystick_nb*5)) / 32] & ~(3 << (118 + (joystick_nb*5)) % 32)) | 2 << ((118 + (joystick_nb*5)) % 32);
+                        }
+                        if (axes[axis].y > 0)
+                        {
+                            parmreg[4 + (118 + (joystick_nb*5)) / 32] = (parmreg[4 + (118 + (joystick_nb*5)) / 32] & ~(3 << (118 + (joystick_nb*5)) % 32)) | 1 << ((118 + (joystick_nb*5)) % 32);
+                        }
+                        if (axes[axis].x == 0)
+                        {
+                            parmreg[4 + (120 + (joystick_nb*5)) / 32] = (parmreg[4 + (120 + (joystick_nb*5)) / 32] & ~(3 << (120 + (joystick_nb*5)) % 32)) | 3 << ((120 + (joystick_nb*5)) % 32);
+                        }
+                        if (axes[axis].y == 0)
+                        {
+                            parmreg[4 + (118 + (joystick_nb*5)) / 32] = (parmreg[4 + (118 + (joystick_nb*5)) / 32] & ~(3 << (118 + (joystick_nb*5)) % 32)) | 3 << ((118 + (joystick_nb*5)) % 32);
+                        }
+                    }
+
+                    break;
+                default:
+                    /* Ignore init events. */
+                    break;
             }
 
-            break;
-        default:
-            /* Ignore init events. */
-            break;
         }
 
         fflush(stdout);
     }
 
-    printf("Joystick unplugged!\n");
+    printf("Joysticks unplugged!\n");
     close(js);
 
     return NULL;
